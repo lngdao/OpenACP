@@ -1,4 +1,5 @@
 import { spawn, execSync, type ChildProcess } from 'node:child_process'
+import { Transform } from 'node:stream'
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -109,9 +110,25 @@ export class AgentInstance {
       instance.stderrCapture.append(chunk.toString())
     })
 
-    // 3. Create ACP stream
-    const toAgent = nodeToWebWritable(instance.child.stdin!)
-    const fromAgent = nodeToWebReadable(instance.child.stdout!)
+    // 3. Create ACP stream with raw NDJSON logging
+    const stdinLogger = new Transform({
+      transform(chunk, _enc, cb) {
+        log.debug({ direction: 'send', raw: chunk.toString().trimEnd() }, 'ACP raw')
+        cb(null, chunk)
+      },
+    })
+    stdinLogger.pipe(instance.child.stdin!)
+
+    const stdoutLogger = new Transform({
+      transform(chunk, _enc, cb) {
+        log.debug({ direction: 'recv', raw: chunk.toString().trimEnd() }, 'ACP raw')
+        cb(null, chunk)
+      },
+    })
+    instance.child.stdout!.pipe(stdoutLogger)
+
+    const toAgent = nodeToWebWritable(stdinLogger)
+    const fromAgent = nodeToWebReadable(stdoutLogger)
     const stream = ndJsonStream(toAgent, fromAgent)
 
     // 4. Create ClientSideConnection
