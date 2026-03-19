@@ -1,6 +1,7 @@
 import { Bot } from "grammy";
 import {
   ChannelAdapter,
+  type ChannelConfig,
   type OpenACPCore,
   type OutgoingMessage,
   type PermissionRequest,
@@ -45,7 +46,7 @@ export class TelegramAdapter extends ChannelAdapter {
   private assistantTopicId!: number;
 
   constructor(core: OpenACPCore, config: TelegramChannelConfig) {
-    super(core, config as never);
+    super(core, config as unknown as ChannelConfig);
     this.telegramConfig = config;
   }
 
@@ -55,7 +56,7 @@ export class TelegramAdapter extends ChannelAdapter {
     });
 
     // Global error handler — prevent bot from crashing on unhandled errors
-    this.bot.catch((err) => log.error("Bot error:", err.message));
+    this.bot.catch((err) => log.error("Bot error:", err.error));
 
     // Middleware: only accept messages from configured chatId
     this.bot.use((ctx, next) => {
@@ -129,16 +130,16 @@ export class TelegramAdapter extends ChannelAdapter {
       const agentList = agents
         .map(
           (a) =>
-            `${escapeHtml(a.name)}${a.name === config.defaultAgent ? " (mặc định)" : ""}`,
+            `${escapeHtml(a.name)}${a.name === config.defaultAgent ? " (default)" : ""}`,
         )
         .join(", ");
       const workspace = escapeHtml(config.workspace.baseDir);
 
       const welcomeText =
-        `Xin chào! Tôi là <b>OpenACP Assistant</b> — trợ lý quản lý phiên coding AI của bạn.\n\n` +
-        `Agents có sẵn: ${agentList}\n` +
+        `👋 <b>OpenACP Assistant</b> is online.\n\n` +
+        `Available agents: ${agentList}\n` +
         `Workspace: <code>${workspace}</code>\n\n` +
-        `<b>Chọn một hành động:</b>`;
+        `<b>Select an action:</b>`;
 
       await this.bot.api.sendMessage(this.telegramConfig.chatId, welcomeText, {
         message_thread_id: this.assistantTopicId,
@@ -227,7 +228,9 @@ export class TelegramAdapter extends ChannelAdapter {
         await this.finalizeDraft(sessionId);
         const msg = await this.bot.api.sendMessage(
           this.telegramConfig.chatId,
-          formatToolCall(content.metadata as never),
+          formatToolCall(
+            content.metadata as Parameters<typeof formatToolCall>[0],
+          ),
           {
             message_thread_id: threadId,
             parse_mode: "HTML",
@@ -252,7 +255,9 @@ export class TelegramAdapter extends ChannelAdapter {
             await this.bot.api.editMessageText(
               this.telegramConfig.chatId,
               msgId,
-              formatToolUpdate(content.metadata as never),
+              formatToolUpdate(
+                content.metadata as Parameters<typeof formatToolUpdate>[0],
+              ),
               { parse_mode: "HTML" },
             );
           } catch {
@@ -266,7 +271,7 @@ export class TelegramAdapter extends ChannelAdapter {
         await this.finalizeDraft(sessionId);
         await this.bot.api.sendMessage(
           this.telegramConfig.chatId,
-          formatPlan(content.metadata as never),
+          formatPlan(content.metadata as Parameters<typeof formatPlan>[0]),
           {
             message_thread_id: threadId,
             parse_mode: "HTML",
@@ -279,7 +284,7 @@ export class TelegramAdapter extends ChannelAdapter {
       case "usage": {
         await this.bot.api.sendMessage(
           this.telegramConfig.chatId,
-          formatUsage(content.metadata as never),
+          formatUsage(content.metadata as Parameters<typeof formatUsage>[0]),
           {
             message_thread_id: threadId,
             parse_mode: "HTML",
