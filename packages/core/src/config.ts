@@ -133,6 +133,20 @@ export class ConfigManager {
     return resolved
   }
 
+  async exists(): Promise<boolean> {
+    return fs.existsSync(this.configPath)
+  }
+
+  getConfigPath(): string {
+    return this.configPath
+  }
+
+  async writeNew(config: Config): Promise<void> {
+    const dir = path.dirname(this.configPath)
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2))
+  }
+
   private applyEnvOverrides(raw: Record<string, unknown>): void {
     const overrides: [string, string[]][] = [
       ['OPENACP_TELEGRAM_BOT_TOKEN', ['channels', 'telegram', 'botToken']],
