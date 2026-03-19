@@ -12,7 +12,7 @@ export class TelegramAdapter extends ChannelAdapter {
   private bot!: Bot
   private telegramConfig: TelegramChannelConfig
   private sessionDrafts: Map<string, MessageDraft> = new Map()
-  private toolCallMessages: Map<string, Map<string, number>> = new Map()  // sessionId → (toolCallId → msgId)
+  private toolCallMessages: Map<string, Map<string, { msgId: number; name: string; kind?: string }>> = new Map()  // sessionId → (toolCallId → state)
   private permissionHandler!: PermissionHandler
   private assistantSession: Session | null = null
   private notificationTopicId!: number
@@ -26,9 +26,23 @@ export class TelegramAdapter extends ChannelAdapter {
   async start(): Promise<void> {
     this.bot = new Bot(this.telegramConfig.botToken)
 
-    // Middleware: only accept messages from configured chatId
+    // Global error handler — prevent unhandled errors from crashing the bot
+    this.bot.catch((err) => {
+      log.error('Bot error:', err.message || err)
+    })
+
+    // Ensure allowed_updates includes callback_query on every poll
+    this.bot.api.config.use((prev, method, payload, signal) => {
+      if (method === 'getUpdates') {
+        (payload as any).allowed_updates = (payload as any).allowed_updates ?? ['message', 'callback_query']
+      }
+      return prev(method, payload, signal)
+    })
+
+    // Middleware: only accept updates from configured chatId
     this.bot.use((ctx, next) => {
-      if (ctx.chat?.id !== this.telegramConfig.chatId) return
+      const chatId = ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id
+      if (chatId !== this.telegramConfig.chatId) return
       return next()
     })
 
@@ -101,19 +115,19 @@ export class TelegramAdapter extends ChannelAdapter {
       // Notification topic → ignore
       if (threadId === this.notificationTopicId) return
 
-      // Assistant topic → forward to assistant session
+      // Assistant topic → forward to assistant session (fire-and-forget)
       if (threadId === this.assistantTopicId) {
-        await handleAssistantMessage(this.assistantSession, ctx.message.text)
+        handleAssistantMessage(this.assistantSession, ctx.message.text).catch(err => log.error('Assistant error:', err))
         return
       }
 
-      // Session topic → forward to core
-      await (this.core as OpenACPCore).handleMessage({
+      // Session topic → forward to core (fire-and-forget to avoid blocking polling)
+      ;(this.core as OpenACPCore).handleMessage({
         channelId: 'telegram',
         threadId: String(threadId),
         userId: String(ctx.from.id),
         text: ctx.message.text,
-      })
+      }).catch(err => log.error('handleMessage error:', err))
     })
   }
 
@@ -143,23 +157,27 @@ export class TelegramAdapter extends ChannelAdapter {
 
       case 'tool_call': {
         await this.finalizeDraft(sessionId)
+        const meta = content.metadata as any
         const msg = await this.bot.api.sendMessage(this.telegramConfig.chatId,
-          formatToolCall(content.metadata as any),
+          formatToolCall(meta),
           { message_thread_id: threadId, parse_mode: 'HTML', disable_notification: true }
         )
         if (!this.toolCallMessages.has(sessionId)) {
           this.toolCallMessages.set(sessionId, new Map())
         }
-        this.toolCallMessages.get(sessionId)!.set(content.metadata?.id as string, msg.message_id)
+        this.toolCallMessages.get(sessionId)!.set(meta.id, { msgId: msg.message_id, name: meta.name, kind: meta.kind })
         break
       }
 
       case 'tool_update': {
-        const msgId = this.toolCallMessages.get(sessionId)?.get(content.metadata?.id as string)
-        if (msgId) {
+        const meta = content.metadata as any
+        const toolState = this.toolCallMessages.get(sessionId)?.get(meta.id)
+        if (toolState) {
+          // Merge name/kind from original tool_call
+          const merged = { ...meta, name: meta.name || toolState.name, kind: meta.kind || toolState.kind }
           try {
-            await this.bot.api.editMessageText(this.telegramConfig.chatId, msgId,
-              formatToolUpdate(content.metadata as any),
+            await this.bot.api.editMessageText(this.telegramConfig.chatId, toolState.msgId,
+              formatToolUpdate(merged),
               { parse_mode: 'HTML' }
             )
           } catch { /* edit failed */ }

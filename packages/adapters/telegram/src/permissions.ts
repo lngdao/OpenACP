@@ -70,7 +70,10 @@ export class PermissionHandler {
       const [, callbackKey, optionId] = parts
 
       const pending = this.pending.get(callbackKey)
-      if (!pending) return
+      if (!pending) {
+        try { await ctx.answerCallbackQuery({ text: '❌ Expired' }) } catch { /* old query */ }
+        return
+      }
 
       const session = this.getSession(pending.sessionId)
       if (session?.pendingPermission?.requestId === pending.requestId) {
@@ -79,7 +82,7 @@ export class PermissionHandler {
       }
       this.pending.delete(callbackKey)
 
-      await ctx.answerCallbackQuery({ text: '✅ Responded' })
+      try { await ctx.answerCallbackQuery({ text: '✅ Responded' }) } catch { /* old query */ }
 
       // Remove buttons
       try {
