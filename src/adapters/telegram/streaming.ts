@@ -1,4 +1,4 @@
-import type { Bot } from "grammy";
+import { type Bot, InlineKeyboard } from "grammy";
 import { markdownToTelegramHtml, splitMessage } from "./formatting.js";
 
 export class MessageDraft {
@@ -86,7 +86,7 @@ export class MessageDraft {
     }
   }
 
-  async finalize(): Promise<number | undefined> {
+  async finalize(replyMarkup?: InlineKeyboard): Promise<number | undefined> {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = undefined;
@@ -104,6 +104,11 @@ export class MessageDraft {
     try {
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
+        // Only attach keyboard to the LAST chunk
+        const isLast = i === chunks.length - 1;
+        const markup =
+          isLast && replyMarkup ? { reply_markup: replyMarkup } : {};
+
         if (i === 0 && this.messageId) {
           // Edit existing message with first chunk
           await this.bot.api.editMessageText(
@@ -112,6 +117,7 @@ export class MessageDraft {
             chunk,
             {
               parse_mode: "HTML",
+              ...markup,
             },
           );
         } else {
@@ -120,6 +126,7 @@ export class MessageDraft {
             message_thread_id: this.threadId,
             parse_mode: "HTML",
             disable_notification: true,
+            ...markup,
           });
           this.messageId = msg.message_id;
         }

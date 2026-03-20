@@ -1,4 +1,4 @@
-import { Bot } from "grammy";
+import { Bot, InlineKeyboard } from "grammy";
 import {
   ChannelAdapter,
   type OpenACPCore,
@@ -375,6 +375,7 @@ export class TelegramAdapter extends ChannelAdapter {
       }
 
       case "usage": {
+        await this.finalizeDraft(sessionId);
         // Show usage stats
         await this.bot.api.sendMessage(
           this.telegramConfig.chatId,
@@ -609,26 +610,20 @@ export class TelegramAdapter extends ChannelAdapter {
     const draft = this.sessionDrafts.get(sessionId);
     if (!draft) return;
 
-    const fullText = draft.getBuffer();
-    const messageId = await draft.finalize();
-    this.sessionDrafts.delete(sessionId);
-
-    // Post-finalize: detect actions in assistant responses
-    if (sessionId === this.assistantSession?.id && messageId && fullText) {
-      const detected = detectAction(fullText);
-      if (detected) {
-        const actionId = storeAction(detected);
-        const keyboard = buildActionKeyboard(actionId, detected);
-        try {
-          await this.bot.api.editMessageReplyMarkup(
-            this.telegramConfig.chatId,
-            messageId,
-            { reply_markup: keyboard },
-          );
-        } catch (err) {
-          log.warn({ err }, "Failed to add action buttons");
+    // Detect actions in assistant responses and pass keyboard to finalize in one API call
+    let keyboard: InlineKeyboard | undefined;
+    if (sessionId === this.assistantSession?.id) {
+      const fullText = draft.getBuffer();
+      if (fullText) {
+        const detected = detectAction(fullText);
+        if (detected) {
+          const actionId = storeAction(detected);
+          keyboard = buildActionKeyboard(actionId, detected);
         }
       }
     }
+
+    await draft.finalize(keyboard);
+    this.sessionDrafts.delete(sessionId);
   }
 }
