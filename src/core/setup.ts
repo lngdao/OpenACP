@@ -399,6 +399,8 @@ export async function runSetup(configManager: ConfigManager): Promise<boolean> {
         maxFiles: 7,
         sessionLogRetentionDays: 30,
       },
+      runMode: "foreground",
+      autoStart: false,
     };
 
     try {
