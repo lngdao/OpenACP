@@ -20,12 +20,26 @@ import type {
 import { createChildLogger } from "./log.js";
 const log = createChildLogger({ module: "agent-instance" });
 
+/** Find the nearest ancestor directory containing package.json */
+function findPackageRoot(startDir: string): string {
+  let dir = startDir;
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, "package.json"))) {
+      return dir;
+    }
+    dir = path.dirname(dir);
+  }
+  return startDir;
+}
+
 /** Resolve an agent command to a directly executable form (avoids shell wrappers) */
 function resolveAgentCommand(cmd: string): { command: string; args: string[] } {
   // Directories to search for node_modules: cwd AND the package's own directory
   const searchRoots = [process.cwd()];
   // Add the directory where this package is installed (for global installs)
-  const ownDir = path.resolve(import.meta.dirname, "..", "..");
+  // Use findPackageRoot instead of hardcoded "../.." to handle both tsc (dist/core/)
+  // and tsup bundle (dist/) directory structures correctly
+  const ownDir = findPackageRoot(import.meta.dirname);
   if (ownDir !== process.cwd()) {
     searchRoots.push(ownDir);
   }
