@@ -87,6 +87,7 @@ export class TelegramAdapter extends ChannelAdapter {
         name: string;
         kind?: string;
         viewerLinks?: { file?: string; diff?: string };
+        viewerFilePath?: string;
       }
     >
   > = new Map(); // sessionId → (toolCallId → state)
@@ -384,6 +385,7 @@ export class TelegramAdapter extends ChannelAdapter {
           name: meta.name,
           kind: meta.kind,
           viewerLinks: meta.viewerLinks,
+          viewerFilePath: (content.metadata as any)?.viewerFilePath,
         });
         break;
       }
@@ -399,15 +401,18 @@ export class TelegramAdapter extends ChannelAdapter {
         };
         const toolState = this.toolCallMessages.get(sessionId)?.get(meta.id);
         if (toolState) {
-          // Carry forward viewerLinks from previous updates if not present in current
+          // Carry forward viewerLinks and filePath from previous updates
           const viewerLinks = meta.viewerLinks || toolState.viewerLinks;
+          const viewerFilePath = (content.metadata as any)?.viewerFilePath || toolState.viewerFilePath;
           if (meta.viewerLinks) toolState.viewerLinks = meta.viewerLinks;
+          if (viewerFilePath) toolState.viewerFilePath = viewerFilePath;
           // Merge name/kind from original tool_call
           const merged = {
             ...meta,
             name: meta.name || toolState.name,
             kind: meta.kind || toolState.kind,
             viewerLinks,
+            viewerFilePath,
           };
           try {
             await this.sendQueue.enqueue(() =>

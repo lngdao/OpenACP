@@ -25,31 +25,48 @@ export class TunnelService {
   }
 
   async start(): Promise<string> {
-    // 1. Start HTTP server
+    // 1. Start HTTP server — try configured port, then auto-increment up to 10 times
     const authToken = this.config.auth.enabled ? this.config.auth.token : undefined
     const app = createTunnelServer(this.store, authToken)
 
-    this.server = serve({ fetch: app.fetch, port: this.config.port })
-    // Wait for server to be listening or fail
-    await new Promise<void>((resolve, reject) => {
-      this.server!.on('listening', () => resolve())
-      this.server!.on('error', (err: NodeJS.ErrnoException) => reject(err))
-    }).catch((err) => {
-      log.warn({ err: err.message, port: this.config.port }, 'Tunnel HTTP server failed to start')
-      this.server = null
+    let actualPort = this.config.port
+    const maxRetries = 10
+
+    for (let i = 0; i < maxRetries; i++) {
+      const port = this.config.port + i
+      const server = serve({ fetch: app.fetch, port })
+
+      const ok = await new Promise<boolean>((resolve) => {
+        server.on('listening', () => resolve(true))
+        server.on('error', () => resolve(false))
+      })
+
+      if (ok) {
+        this.server = server
+        actualPort = port
+        if (i > 0) {
+          log.info({ configuredPort: this.config.port, actualPort }, 'Configured port in use, using next available')
+        }
+        log.info({ port: actualPort }, 'Tunnel HTTP server started')
+        break
+      }
+
+      server.close()
+    }
+
+    if (!this.server) {
+      log.warn({ port: this.config.port }, 'Could not find available port for tunnel HTTP server')
       this.publicUrl = `http://localhost:${this.config.port}`
-      return
-    })
-    if (!this.server) return this.publicUrl
-    log.info({ port: this.config.port }, 'Tunnel HTTP server started')
+      return this.publicUrl
+    }
 
     // 2. Start tunnel provider
     try {
-      this.publicUrl = await this.provider.start(this.config.port)
+      this.publicUrl = await this.provider.start(actualPort)
       log.info({ url: this.publicUrl }, 'Tunnel public URL ready')
     } catch (err) {
       log.warn({ err }, 'Tunnel provider failed to start, running without public URL')
-      this.publicUrl = `http://localhost:${this.config.port}`
+      this.publicUrl = `http://localhost:${actualPort}`
     }
 
     return this.publicUrl

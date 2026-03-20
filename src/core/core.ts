@@ -320,7 +320,7 @@ export class OpenACPCore {
       "enrichWithViewerLinks: inspecting event",
     );
 
-    const fileInfo = extractFileInfo(name, kind, event.content);
+    const fileInfo = extractFileInfo(name, kind, event.content, event.rawInput, event.meta);
     if (!fileInfo) return;
 
     log.info(
@@ -359,6 +359,7 @@ export class OpenACPCore {
 
     if (Object.keys(viewerLinks).length > 0) {
       metadata.viewerLinks = viewerLinks;
+      metadata.viewerFilePath = fileInfo.filePath;
     }
   }
 

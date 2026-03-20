@@ -13,19 +13,47 @@ export interface FileInfo {
  * - Text block: { type: "text", text: "..." }
  * - rawInput: { file_path: "...", content: "..." }
  */
-export function extractFileInfo(name: string, kind: string | undefined, content: unknown): FileInfo | null {
-  if (!content) return null
-
+export function extractFileInfo(
+  name: string,
+  kind: string | undefined,
+  content: unknown,
+  rawInput?: unknown,
+  meta?: unknown,
+): FileInfo | null {
   // Only process file-related tool kinds
   if (kind && !['read', 'edit', 'write'].includes(kind)) return null
 
-  // Try to extract from known ACP content patterns
-  const info = parseContent(content)
+  let info: Partial<FileInfo> | null = null
+
+  // 1. Try _meta.claudeCode.toolResponse.file (Claude Code puts raw file data here)
+  if (meta) {
+    const m = meta as any
+    const file = m?.claudeCode?.toolResponse?.file
+    if (file?.filePath && file?.content) {
+      info = { filePath: file.filePath, content: file.content }
+    }
+  }
+
+  // 2. Try rawInput for file path + content from regular content
+  if (!info && rawInput) {
+    const ri = rawInput as any
+    const filePath = ri?.file_path || ri?.filePath || ri?.path
+    if (typeof filePath === 'string') {
+      // Try to get content from the content field
+      const parsed = content ? parseContent(content) : null
+      info = { filePath, content: parsed?.content || ri?.content }
+    }
+  }
+
+  // 3. Try to extract from known ACP content patterns
+  if (!info && content) {
+    info = parseContent(content)
+  }
+
   if (!info) return null
 
   // Infer file path from tool name if not in content
   if (!info.filePath) {
-    // Some agents put the path in the tool name (e.g., "Read src/main.ts" or "Write index.html")
     const pathMatch = name.match(/(?:Read|Edit|Write|View)\s+(.+)/i)
     if (pathMatch) info.filePath = pathMatch[1].trim()
   }

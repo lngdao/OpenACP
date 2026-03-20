@@ -56,6 +56,8 @@ export type AgentEvent =
       status: string;
       content?: unknown;
       locations?: unknown;
+      rawInput?: unknown;
+      meta?: unknown;
     }
   | {
       type: "tool_update";
@@ -63,6 +65,8 @@ export type AgentEvent =
       status: string;
       content?: unknown;
       locations?: unknown;
+      rawInput?: unknown;
+      meta?: unknown;
     }
   | { type: "plan"; entries: PlanEntry[] }
   | {

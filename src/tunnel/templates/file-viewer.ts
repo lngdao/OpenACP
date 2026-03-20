@@ -58,6 +58,7 @@ export function renderFileViewer(entry: ViewerEntry): string {
       ${formatBreadcrumb(fileName)}
     </div>
     <div class="actions">
+      ${lang === 'markdown' ? '<button class="btn" onclick="togglePreview()" id="btn-preview">Preview</button>' : ''}
       <button class="btn" onclick="toggleWordWrap()" id="btn-wrap">Wrap</button>
       <button class="btn" onclick="toggleMinimap()" id="btn-minimap">Minimap</button>
       <button class="btn" onclick="toggleTheme()" id="btn-theme">Light</button>
@@ -65,11 +66,15 @@ export function renderFileViewer(entry: ViewerEntry): string {
     </div>
   </div>
   <div id="editor-container"></div>
+  <div id="preview-wrapper" style="display:none; flex:1; overflow-y:auto;">
+    <div id="preview-container" style="padding:24px 48px; max-width:900px; margin:0 auto; width:100%;"></div>
+  </div>
   <div class="status-bar">
     <span>${escapeHtml(entry.language || 'plaintext')} | ${entry.content.split('\n').length} lines</span>
     <span>OpenACP Viewer (read-only)</span>
   </div>
 
+  ${lang === 'markdown' ? '<script src="https://cdn.jsdelivr.net/npm/marked@15.0.0/marked.min.js"></script>' : ''}
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
   <script>
     const content = ${safeContent};
@@ -139,7 +144,47 @@ export function renderFileViewer(entry: ViewerEntry): string {
         setTimeout(() => btn.textContent = 'Copy', 2000);
       });
     }
+
+    let previewMode = false;
+    function togglePreview() {
+      previewMode = !previewMode;
+      const editorEl = document.getElementById('editor-container');
+      const wrapperEl = document.getElementById('preview-wrapper');
+      const previewEl = document.getElementById('preview-container');
+      const btn = document.getElementById('btn-preview');
+      if (previewMode) {
+        editorEl.style.display = 'none';
+        wrapperEl.style.display = 'block';
+        previewEl.innerHTML = typeof marked !== 'undefined' ? marked.parse(content) : content.replace(/\\n/g, '<br>');
+        previewEl.style.color = isDark ? '#d4d4d4' : '#1e1e1e';
+        wrapperEl.style.background = isDark ? '#1e1e1e' : '#ffffff';
+        btn.classList.add('active');
+        btn.textContent = 'Editor';
+      } else {
+        editorEl.style.display = 'block';
+        wrapperEl.style.display = 'none';
+        btn.classList.remove('active');
+        btn.textContent = 'Preview';
+      }
+    }
   </script>
+  <style>
+    #preview-container { font-size: 15px; line-height: 1.7; }
+    #preview-container h1 { font-size: 2em; margin: 0.5em 0 0.3em; border-bottom: 1px solid #3c3c3c; padding-bottom: 0.3em; }
+    #preview-container h2 { font-size: 1.5em; margin: 0.5em 0 0.3em; border-bottom: 1px solid #3c3c3c; padding-bottom: 0.2em; }
+    #preview-container h3 { font-size: 1.25em; margin: 0.4em 0 0.2em; }
+    #preview-container p { margin: 0.5em 0; }
+    #preview-container code { background: rgba(128,128,128,0.2); padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+    #preview-container pre { background: rgba(0,0,0,0.3); padding: 16px; border-radius: 6px; overflow-x: auto; margin: 0.5em 0; }
+    #preview-container pre code { background: none; padding: 0; }
+    #preview-container blockquote { border-left: 3px solid #505050; padding-left: 16px; margin: 0.5em 0; color: #969696; }
+    #preview-container ul, #preview-container ol { padding-left: 24px; margin: 0.5em 0; }
+    #preview-container table { border-collapse: collapse; margin: 0.5em 0; width: 100%; }
+    #preview-container th, #preview-container td { border: 1px solid #3c3c3c; padding: 6px 12px; text-align: left; }
+    #preview-container th { background: rgba(128,128,128,0.15); }
+    #preview-container a { color: #3794ff; }
+    #preview-container img { max-width: 100%; }
+  </style>
 </body>
 </html>`
 }

@@ -322,6 +322,8 @@ export class AgentInstance {
               kind: update.kind ?? undefined,
               status: update.status ?? "pending",
               content: update.content ?? undefined,
+              rawInput: (update as any).rawInput ?? undefined,
+              meta: (update as any)._meta ?? undefined,
             };
             break;
           case "tool_call_update":
@@ -330,6 +332,8 @@ export class AgentInstance {
               id: update.toolCallId,
               status: update.status ?? "pending",
               content: update.content ?? undefined,
+              rawInput: (update as any).rawInput ?? undefined,
+              meta: (update as any)._meta ?? undefined,
             };
             break;
           case "plan":
