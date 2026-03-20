@@ -57,6 +57,16 @@ export async function startServer() {
   // 3. Create core
   const core = new OpenACPCore(configManager)
 
+  // 3.5 Start tunnel if configured
+  let tunnelService: import('./tunnel/tunnel-service.js').TunnelService | undefined
+  if (config.tunnel.enabled) {
+    const { TunnelService } = await import('./tunnel/tunnel-service.js')
+    tunnelService = new TunnelService(config.tunnel)
+    const publicUrl = await tunnelService.start()
+    core.tunnelService = tunnelService
+    log.info({ publicUrl }, 'Tunnel started')
+  }
+
   // 4. Register adapters from config
   for (const [channelName, channelConfig] of Object.entries(config.channels)) {
     if (!channelConfig.enabled) continue
@@ -97,6 +107,7 @@ export async function startServer() {
     try {
       if (apiServer) await apiServer.stop()
       await core.stop()
+      if (tunnelService) await tunnelService.stop()
     } catch (err) {
       log.error({ err }, 'Error during shutdown')
     }

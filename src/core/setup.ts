@@ -285,7 +285,8 @@ async function detectChatId(token: string): Promise<number> {
 // --- Agent detection ---
 
 const KNOWN_AGENTS: Array<{ name: string; commands: string[] }> = [
-  { name: "claude", commands: ["claude-agent-acp"] },
+  { name: "claude", commands: ["claude-agent-acp", "claude-code", "claude"] },
+  { name: "codex", commands: ["codex"] },
 ];
 
 function commandExists(cmd: string): boolean {
@@ -295,6 +296,7 @@ function commandExists(cmd: string): boolean {
   } catch {
     // not in PATH
   }
+  // Check node_modules/.bin (walks up from cwd)
   let dir = process.cwd();
   while (true) {
     const binPath = path.join(dir, "node_modules", ".bin", cmd);
@@ -311,6 +313,7 @@ export async function detectAgents(): Promise<
 > {
   const found: Array<{ name: string; command: string }> = [];
   for (const agent of KNOWN_AGENTS) {
+    // Find all available commands for this agent (PATH + node_modules/.bin)
     const available: string[] = [];
     for (const cmd of agent.commands) {
       if (commandExists(cmd)) {
@@ -318,6 +321,7 @@ export async function detectAgents(): Promise<
       }
     }
     if (available.length > 0) {
+      // Prefer claude-agent-acp over claude/claude-code (priority order)
       found.push({ name: agent.name, command: available[0] });
     }
   }
@@ -533,6 +537,15 @@ export async function runSetup(configManager: ConfigManager): Promise<boolean> {
       api: {
         port: 21420,
         host: '127.0.0.1',
+      },
+      sessionStore: { ttlDays: 30 },
+      tunnel: {
+        enabled: true,
+        port: 3100,
+        provider: "cloudflare",
+        options: {},
+        storeTtlMinutes: 60,
+        auth: { enabled: false },
       },
     };
 

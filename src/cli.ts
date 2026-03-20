@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
+import { setDefaultAutoSelectFamily } from "node:net";
+setDefaultAutoSelectFamily(false);
+
 import { installPlugin, uninstallPlugin, listPlugins } from './core/plugin-manager.js'
 import { readApiPort, removeStalePortFile, apiCall } from './core/api-client.js'
 
 const NPM_PACKAGE = '@openacp/cli'
 
-const args = process.argv.slice(2)
-const command = args[0]
+const args = process.argv.slice(2);
+const command = args[0];
 
 function getCurrentVersion(): string {
   try {
@@ -118,61 +121,66 @@ Note: "openacp status" shows daemon process health.
 
 Install:
   npm install -g @openacp/cli
+
+Examples:
+  openacp
+  openacp install @openacp/adapter-discord
+  openacp uninstall @openacp/adapter-discord
 `)
 }
 
 async function main() {
-  if (command === '--help' || command === '-h') {
-    printHelp()
-    return
+  if (command === "--help" || command === "-h") {
+    printHelp();
+    return;
   }
 
-  if (command === '--version' || command === '-v') {
+  if (command === "--version" || command === "-v") {
     // In published build: read version from own package.json via createRequire
     // In dev: fallback to 'dev'
     try {
-      const { createRequire } = await import('node:module')
-      const require = createRequire(import.meta.url)
-      const pkg = require('../package.json')
-      console.log(`openacp v${pkg.version}`)
+      const { createRequire } = await import("node:module");
+      const require = createRequire(import.meta.url);
+      const pkg = require("../package.json");
+      console.log(`openacp v${pkg.version}`);
     } catch {
-      console.log('openacp v0.0.0-dev')
+      console.log("openacp v0.0.0-dev");
     }
-    return
+    return;
   }
 
-  if (command === 'install') {
-    const pkg = args[1]
+  if (command === "install") {
+    const pkg = args[1];
     if (!pkg) {
-      console.error('Usage: openacp install <package>')
-      process.exit(1)
+      console.error("Usage: openacp install <package>");
+      process.exit(1);
     }
-    installPlugin(pkg)
-    return
+    installPlugin(pkg);
+    return;
   }
 
-  if (command === 'uninstall') {
-    const pkg = args[1]
+  if (command === "uninstall") {
+    const pkg = args[1];
     if (!pkg) {
-      console.error('Usage: openacp uninstall <package>')
-      process.exit(1)
+      console.error("Usage: openacp uninstall <package>");
+      process.exit(1);
     }
-    uninstallPlugin(pkg)
-    return
+    uninstallPlugin(pkg);
+    return;
   }
 
-  if (command === 'plugins') {
-    const plugins = listPlugins()
-    const entries = Object.entries(plugins)
+  if (command === "plugins") {
+    const plugins = listPlugins();
+    const entries = Object.entries(plugins);
     if (entries.length === 0) {
-      console.log('No plugins installed.')
+      console.log("No plugins installed.");
     } else {
-      console.log('Installed plugins:')
+      console.log("Installed plugins:");
       for (const [name, version] of entries) {
-        console.log(`  ${name}@${version}`)
+        console.log(`  ${name}@${version}`);
       }
     }
-    return
+    return;
   }
 
   if (command === 'runtime') {
@@ -450,6 +458,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('Fatal:', err)
-  process.exit(1)
-})
+  console.error("Fatal:", err);
+  process.exit(1);
+});
