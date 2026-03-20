@@ -32,3 +32,23 @@ describe('ConfigSchema - runMode and autoStart', () => {
     expect(() => ConfigSchema.parse({ ...baseConfig, runMode: 'invalid' })).toThrow()
   })
 })
+
+describe('ConfigSchema - api', () => {
+  const baseConfig = {
+    channels: { telegram: { enabled: false } },
+    agents: { claude: { command: 'claude-agent-acp', args: [], env: {} } },
+    defaultAgent: 'claude',
+  }
+
+  it('defaults api.port to 21420 and api.host to 127.0.0.1', () => {
+    const result = ConfigSchema.parse(baseConfig)
+    expect(result.api.port).toBe(21420)
+    expect(result.api.host).toBe('127.0.0.1')
+  })
+
+  it('accepts custom api port', () => {
+    const result = ConfigSchema.parse({ ...baseConfig, api: { port: 9999 } })
+    expect(result.api.port).toBe(9999)
+    expect(result.api.host).toBe('127.0.0.1')
+  })
+})
