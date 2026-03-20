@@ -21,6 +21,7 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.16.0",
     "@inquirer/prompts": "^8.3.2",
+    "@zed-industries/claude-agent-acp": "^0.22.2",
     "grammy": "^1.30.0",
     "nanoid": "^5.0.0",
     "pino": "^10.3.1",
