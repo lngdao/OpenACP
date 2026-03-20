@@ -395,6 +395,166 @@ async function editApi(config: Config, updates: ConfigUpdates): Promise<void> {
   console.log(ok(`API port set to ${newPort.trim()}`))
 }
 
+// --- Edit: Tunnel ---
+
+async function editTunnel(config: Config, updates: ConfigUpdates): Promise<void> {
+  const tunnel = config.tunnel ?? { enabled: false, port: 3100, provider: 'cloudflare', options: {}, storeTtlMinutes: 60, auth: { enabled: false } }
+  const currentUpdates = (updates.tunnel ?? {}) as Record<string, unknown>
+
+  const getVal = <T>(key: string, fallback: T): T =>
+    (key in currentUpdates ? currentUpdates[key] : (tunnel as Record<string, unknown>)[key] ?? fallback) as T
+
+  console.log(header('Tunnel'))
+  console.log(`  Enabled  : ${getVal('enabled', false) ? ok('yes') : dim('no')}`)
+  console.log(`  Provider : ${c.bold}${getVal('provider', 'cloudflare')}${c.reset}`)
+  console.log(`  Port     : ${getVal('port', 3100)}`)
+  const authEnabled = (getVal('auth', { enabled: false }) as { enabled: boolean }).enabled
+  console.log(`  Auth     : ${authEnabled ? ok('enabled') : dim('disabled')}`)
+  console.log('')
+
+  while (true) {
+    const choice = await select({
+      message: 'Tunnel settings:',
+      choices: [
+        { name: getVal('enabled', false) ? 'Disable tunnel' : 'Enable tunnel', value: 'toggle' },
+        { name: 'Change provider', value: 'provider' },
+        { name: 'Change port', value: 'port' },
+        { name: 'Provider options', value: 'options' },
+        { name: authEnabled ? 'Disable auth' : 'Enable auth', value: 'auth' },
+        { name: 'Back', value: 'back' },
+      ],
+    })
+
+    if (choice === 'back') break
+
+    if (!updates.tunnel) updates.tunnel = { ...tunnel }
+    const tun = updates.tunnel as Record<string, unknown>
+
+    if (choice === 'toggle') {
+      const current = getVal('enabled', false)
+      tun.enabled = !current
+      console.log(!current ? ok('Tunnel enabled') : ok('Tunnel disabled'))
+    }
+
+    if (choice === 'provider') {
+      const provider = await select({
+        message: 'Select tunnel provider:',
+        choices: [
+          { name: 'Cloudflare (default)', value: 'cloudflare' },
+          { name: 'ngrok', value: 'ngrok' },
+          { name: 'bore', value: 'bore' },
+          { name: 'Tailscale Funnel', value: 'tailscale' },
+        ],
+      })
+      tun.provider = provider
+      tun.options = {} // reset options when switching provider
+      console.log(ok(`Provider set to ${provider}`))
+    }
+
+    if (choice === 'port') {
+      const val = await input({
+        message: 'Tunnel port:',
+        default: String(getVal('port', 3100)),
+        validate: (v) => {
+          const n = Number(v.trim())
+          if (!Number.isInteger(n) || n < 1 || n > 65535) return 'Must be a valid port (1-65535)'
+          return true
+        },
+      })
+      tun.port = Number(val.trim())
+      console.log(ok(`Tunnel port set to ${val.trim()}`))
+    }
+
+    if (choice === 'options') {
+      const provider = getVal('provider', 'cloudflare')
+      const currentOptions = getVal('options', {}) as Record<string, unknown>
+      await editProviderOptions(provider, currentOptions, tun)
+    }
+
+    if (choice === 'auth') {
+      const currentAuth = getVal('auth', { enabled: false }) as { enabled: boolean; token?: string }
+      if (currentAuth.enabled) {
+        tun.auth = { enabled: false }
+        console.log(ok('Tunnel auth disabled'))
+      } else {
+        const token = await input({
+          message: 'Auth token (leave empty to auto-generate):',
+          default: '',
+        })
+        tun.auth = token.trim()
+          ? { enabled: true, token: token.trim() }
+          : { enabled: true }
+        console.log(ok('Tunnel auth enabled'))
+      }
+    }
+  }
+}
+
+async function editProviderOptions(
+  provider: string,
+  currentOptions: Record<string, unknown>,
+  tun: Record<string, unknown>,
+): Promise<void> {
+  if (provider === 'cloudflare') {
+    const domain = await input({
+      message: 'Custom domain (leave empty for random):',
+      default: (currentOptions.domain as string) ?? '',
+    })
+    tun.options = domain.trim() ? { domain: domain.trim() } : {}
+    if (domain.trim()) console.log(ok(`Domain set to ${domain.trim()}`))
+    else console.log(dim('Using random cloudflare domain'))
+  } else if (provider === 'ngrok') {
+    const authtoken = await input({
+      message: 'ngrok authtoken (leave empty to skip):',
+      default: (currentOptions.authtoken as string) ?? '',
+    })
+    const domain = await input({
+      message: 'ngrok domain (leave empty for random):',
+      default: (currentOptions.domain as string) ?? '',
+    })
+    const region = await input({
+      message: 'ngrok region (us, eu, ap — leave empty for default):',
+      default: (currentOptions.region as string) ?? '',
+    })
+    const opts: Record<string, string> = {}
+    if (authtoken.trim()) opts.authtoken = authtoken.trim()
+    if (domain.trim()) opts.domain = domain.trim()
+    if (region.trim()) opts.region = region.trim()
+    tun.options = opts
+    console.log(ok('ngrok options saved'))
+  } else if (provider === 'bore') {
+    const server = await input({
+      message: 'bore server:',
+      default: (currentOptions.server as string) ?? 'bore.pub',
+    })
+    const port = await input({
+      message: 'bore port (leave empty for auto):',
+      default: currentOptions.port ? String(currentOptions.port) : '',
+    })
+    const secret = await input({
+      message: 'bore secret (leave empty to skip):',
+      default: (currentOptions.secret as string) ?? '',
+    })
+    const opts: Record<string, unknown> = { server: server.trim() }
+    if (port.trim()) opts.port = Number(port.trim())
+    if (secret.trim()) opts.secret = secret.trim()
+    tun.options = opts
+    console.log(ok('bore options saved'))
+  } else if (provider === 'tailscale') {
+    const bg = await select({
+      message: 'Run Tailscale Funnel in background?',
+      choices: [
+        { name: 'No', value: 'no' },
+        { name: 'Yes', value: 'yes' },
+      ],
+    })
+    tun.options = bg === 'yes' ? { bg: true } : {}
+    console.log(ok('Tailscale options saved'))
+  } else {
+    console.log(dim(`No configurable options for provider "${provider}"`))
+  }
+}
+
 // --- Main Config Editor ---
 
 export async function runConfigEditor(configManager: ConfigManager): Promise<void> {
@@ -419,6 +579,7 @@ export async function runConfigEditor(configManager: ConfigManager): Promise<voi
           { name: 'Logging', value: 'logging' },
           { name: 'Run Mode', value: 'runMode' },
           { name: 'API', value: 'api' },
+          { name: 'Tunnel', value: 'tunnel' },
           { name: hasChanges ? 'Save & Exit' : 'Exit', value: 'exit' },
         ],
       })
@@ -440,6 +601,7 @@ export async function runConfigEditor(configManager: ConfigManager): Promise<voi
       else if (choice === 'logging') await editLogging(config, updates)
       else if (choice === 'runMode') await editRunMode(config, updates)
       else if (choice === 'api') await editApi(config, updates)
+      else if (choice === 'tunnel') await editTunnel(config, updates)
     }
   } catch (err) {
     if ((err as Error).name === 'ExitPromptError') {
