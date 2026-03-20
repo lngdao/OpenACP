@@ -42,6 +42,8 @@ export const ConfigSchema = z.object({
     sessionTimeoutMinutes: z.number().default(60),
   }).default({}),
   logging: LoggingSchema,
+  runMode: z.enum(['foreground', 'daemon']).default('foreground'),
+  autoStart: z.boolean().default(false),
 })
 
 export type Config = z.infer<typeof ConfigSchema>
@@ -164,6 +166,7 @@ export class ConfigManager {
       ['OPENACP_TELEGRAM_BOT_TOKEN', ['channels', 'telegram', 'botToken']],
       ['OPENACP_TELEGRAM_CHAT_ID', ['channels', 'telegram', 'chatId']],
       ['OPENACP_DEFAULT_AGENT', ['defaultAgent']],
+      ['OPENACP_RUN_MODE', ['runMode']],
     ]
     for (const [envVar, configPath] of overrides) {
       const value = process.env[envVar]
