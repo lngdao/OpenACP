@@ -236,7 +236,7 @@ export class TelegramAdapter extends ChannelAdapter {
     sessionId: string,
     content: OutgoingMessage,
   ): Promise<void> {
-    log.debug({ sessionId, type: content.type }, "Sending message to Telegram");
+    // log.debug({ sessionId, type: content.type }, "Sending message to Telegram");
     const session = (this.core as OpenACPCore).sessionManager.getSession(
       sessionId,
     );
