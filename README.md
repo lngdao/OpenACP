@@ -12,7 +12,7 @@ One message, any channel, any agent.
 [![npm](https://img.shields.io/npm/v/@openacp/cli.svg)](https://www.npmjs.com/package/@openacp/cli)
 [![Twitter Follow](https://img.shields.io/twitter/follow/Open_ACP?style=social)](https://x.com/Open_ACP)
 
-[Getting Started](docs/guide/getting-started.md) | [Agents](docs/guide/agents.md) | [Usage](docs/guide/usage.md) | [Configuration](docs/guide/configuration.md) | [Tunnel](docs/guide/tunnel.md) | [Plugins](docs/guide/plugins.md) | [Development](docs/guide/development.md)
+[Getting Started](docs/guide/getting-started.md) | [Agents](docs/guide/agents.md) | [Usage](docs/guide/usage.md) | [Configuration](docs/guide/configuration.md) | [Plugins](docs/guide/plugins.md) | [Development](docs/guide/development.md)
 
 </div>
 
@@ -77,7 +77,6 @@ OpenACP follows the [Agent Client Protocol (ACP)](https://agentclientprotocol.co
 - **Multi-agent** — Claude Code, Codex, Gemini, Cursor, and [28+ ACP-compatible agents](#supported-agents)
 - **Telegram** — Forum topics, real-time streaming, permission buttons, skill commands
 - **Discord** — Forum/thread-based sessions, slash commands, button interactions
-- **Tunnel & file viewer** — Public file/diff viewer via Cloudflare, ngrok, bore, or Tailscale
 - **Session persistence** — Resume sessions across restarts
 - **Daemon mode** — Background service with auto-start on boot
 - **CLI API** — Create and manage sessions from the terminal
@@ -86,6 +85,16 @@ OpenACP follows the [Agent Client Protocol (ACP)](https://agentclientprotocol.co
 - **Plugin system** — Install channel adapters as npm packages
 - **Structured logging** — Pino with rotation, per-session log files
 - **Self-hosted** — Your keys, your data, your machine
+
+### [Tunnel & Port Forwarding](docs/guide/tunnel.md)
+
+Expose any local port to the internet — dev servers, APIs, static sites. Tunnel is enabled by default with Cloudflare (free, no account needed).
+
+- `/tunnel 3000 my-app` in Telegram or `openacp tunnel add 3000 --label my-app` from CLI
+- `/tunnels` to list active tunnels with public URLs and stop buttons
+- Agents can create tunnels too — say "expose port 5173" and the agent handles it
+- Built-in file/diff viewer — Monaco Editor (VS Code engine) with syntax highlighting, line range links, markdown preview
+- Providers: Cloudflare (default), ngrok, bore, Tailscale Funnel
 
 ## Setup
 

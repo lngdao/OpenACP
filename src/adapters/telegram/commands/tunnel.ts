@@ -85,13 +85,24 @@ export async function handleTunnels(
     return;
   }
 
-  const entries = core.tunnelService.listTunnels();
+  // In session topic: show only that session's tunnels. In assistant/other: show all.
+  const threadId = ctx.message?.message_thread_id;
+  let entries = core.tunnelService.listTunnels();
+  let sessionScoped = false;
+
+  if (threadId) {
+    const session = core.sessionManager.getSessionByThread("telegram", String(threadId));
+    if (session) {
+      entries = entries.filter(e => e.sessionId === session.id);
+      sessionScoped = true;
+    }
+  }
 
   if (entries.length === 0) {
-    await ctx.reply(
-      "No active tunnels.\n\nUse <code>/tunnel &lt;port&gt;</code> to create one.",
-      { parse_mode: "HTML" },
-    );
+    const hint = sessionScoped
+      ? "No tunnels for this session.\n\nUse <code>/tunnel &lt;port&gt;</code> to create one."
+      : "No active tunnels.\n\nUse <code>/tunnel &lt;port&gt;</code> to create one.";
+    await ctx.reply(hint, { parse_mode: "HTML" });
     return;
   }
 
