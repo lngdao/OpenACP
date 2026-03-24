@@ -84,6 +84,7 @@ export async function checkAndPromptUpdate(): Promise<void> {
   const clack = await import('@clack/prompts')
   const yes = await clack.confirm({
     message: 'Update now before starting?',
+    initialValue: true,
   })
   if (clack.isCancel(yes) || !yes) {
     return
