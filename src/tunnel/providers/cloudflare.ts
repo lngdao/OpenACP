@@ -1,7 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { execSync } from 'node:child_process'
+import fs from 'node:fs'
+import path from 'node:path'
+import os from 'node:os'
 import { createChildLogger } from '../../core/log.js'
 import type { TunnelProvider } from '../provider.js'
-import { ensureCloudflared } from './install-cloudflared.js'
 
 const log = createChildLogger({ module: 'cloudflare-tunnel' })
 
@@ -15,28 +18,8 @@ export class CloudflareTunnelProvider implements TunnelProvider {
   }
 
   async start(localPort: number): Promise<string> {
-    const maxRetries = 3
-    let lastError: Error | null = null
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const url = await this.tryStart(localPort)
-        return url
-      } catch (err) {
-        lastError = err as Error
-        if (attempt < maxRetries) {
-          const delay = attempt * 2000
-          log.warn({ attempt, maxRetries, err: lastError.message }, `Cloudflare tunnel failed, retrying in ${delay / 1000}s...`)
-          await new Promise(r => setTimeout(r, delay))
-        }
-      }
-    }
-
-    throw lastError!
-  }
-
-  private async tryStart(localPort: number): Promise<string> {
-    const binaryPath = await ensureCloudflared()
+    // Find cloudflared binary — post-upgrade should have installed it
+    const binaryPath = this.findBinary()
 
     const args = ['tunnel', '--url', `http://localhost:${localPort}`]
     if (this.options.domain) {
@@ -98,5 +81,21 @@ export class CloudflareTunnelProvider implements TunnelProvider {
 
   getPublicUrl(): string {
     return this.publicUrl
+  }
+
+  private findBinary(): string {
+    // 1. Check ~/.openacp/bin/ (installed by post-upgrade)
+    const binPath = path.join(os.homedir(), '.openacp', 'bin', 'cloudflared')
+    if (fs.existsSync(binPath)) return binPath
+
+    // 2. Check PATH
+    try {
+      return execSync('which cloudflared', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim()
+    } catch {
+      // not found
+    }
+
+    // 3. Fallback — hope it's in PATH
+    return 'cloudflared'
   }
 }
