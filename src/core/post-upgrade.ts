@@ -1,17 +1,16 @@
 import { createChildLogger } from "./log.js";
+import { commandExists } from "./agent-dependencies.js";
 import type { Config } from "./config.js";
 
 const log = createChildLogger({ module: "post-upgrade" });
 
 /**
  * Post-upgrade dependency check — runs on every start.
- * Ensures dependencies are available for enabled features.
+ * Centralized source of truth for all binary dependency management.
  * Silent if everything is OK.
  */
 export async function runPostUpgradeChecks(config: Config): Promise<void> {
-  const { commandExists } = await import("./agent-dependencies.js");
-
-  // 1. Tunnel enabled → ensure provider binary
+  // 1. Tunnel provider binary
   if (config.tunnel.enabled) {
     if (config.tunnel.provider === "cloudflare") {
       try {
@@ -26,16 +25,15 @@ export async function runPostUpgradeChecks(config: Config): Promise<void> {
         );
       }
     } else {
-      const providerCmd = config.tunnel.provider;
-      if (!commandExists(providerCmd)) {
+      if (!commandExists(config.tunnel.provider)) {
         log.warn(
-          `Tunnel provider "${providerCmd}" is not installed. Install it or switch to cloudflare (free, auto-installed).`,
+          `Tunnel provider "${config.tunnel.provider}" is not installed. Install it or switch to cloudflare (free, auto-installed).`,
         );
       }
     }
   }
 
-  // 3. Integration not installed → suggest
+  // 2. Claude CLI integration + jq
   try {
     const { getIntegration } = await import("../cli/integrate.js");
     const integration = getIntegration("claude");
@@ -46,16 +44,7 @@ export async function runPostUpgradeChecks(config: Config): Promise<void> {
           'Claude CLI integration not installed. Run "openacp integrate claude" for session transfer + tunnel skill.',
         );
       }
-    }
-  } catch {
-    // integrate module not available — skip
-  }
 
-  // 4. jq missing + handoff integration installed → auto-install
-  try {
-    const { getIntegration } = await import("../cli/integrate.js");
-    const integration = getIntegration("claude");
-    if (integration) {
       const handoff = integration.items.find((i) => i.id === "handoff");
       if (handoff?.isInstalled() && !commandExists("jq")) {
         try {
@@ -70,17 +59,17 @@ export async function runPostUpgradeChecks(config: Config): Promise<void> {
       }
     }
   } catch {
-    // skip
+    // integrate module not available — skip
   }
 
-  // 5. unzip missing → warn (needed for binary agent installs)
+  // 3. unzip (needed for binary agent installs)
   if (!commandExists("unzip")) {
     log.warn(
       "unzip is not installed. Some agent installations (binary distribution) may fail. Install: brew install unzip (macOS) or apt install unzip (Linux)",
     );
   }
 
-  // 6. Check installed agents with uvx distribution → warn if uvx missing
+  // 4. uvx (needed for Python-based agents)
   try {
     const { AgentStore } = await import("./agent-store.js");
     const store = new AgentStore();
