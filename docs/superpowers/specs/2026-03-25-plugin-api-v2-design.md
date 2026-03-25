@@ -628,13 +628,292 @@ Storage implementation: JSON file with debounced writes (same pattern as Session
   2. Adapter integration (command registration, middleware hooks)
   3. CLI commands + documentation
 
+## Security Model
+
+Plugins run in the same Node.js process as OpenACP — they have access to the runtime, environment variables, filesystem, and network. A malicious or compromised plugin can read bot tokens, session data, or execute arbitrary commands. Security must be a first-class concern.
+
+### Threat Model
+
+| Threat | Vector | Impact |
+|--------|--------|--------|
+| Malicious plugin | User installs untrusted npm package | Full system compromise — read secrets, exfiltrate data, execute commands |
+| Supply chain attack | Trusted package compromised upstream | Same as above, harder to detect |
+| Over-privileged plugin | Plugin requests more access than needed | Increased attack surface if plugin has vulnerability |
+| Data exfiltration | Plugin reads session data, sends to external server | User conversations and bot tokens leaked |
+| Plugin impersonation | Malicious plugin claims to be official | User trusts and installs without scrutiny |
+
+### 1. Plugin Manifest & Permission Declaration
+
+Every v2 plugin must declare the permissions it requires in its manifest:
+
+```typescript
+interface OpenACPPlugin {
+  name: string
+  version: string
+  description?: string
+
+  /** Required permissions — determines what PluginContext exposes */
+  permissions: PluginPermission[]
+
+  setup(ctx: PluginContext): Promise<void>
+  teardown?(): Promise<void>
+  createAdapter?(core: OpenACPCore, config: ChannelConfig): ChannelAdapter
+}
+
+type PluginPermission =
+  // Tier 1 — read-only, low risk
+  | 'events:read'           // Listen to system events
+  | 'sessions:list'         // List active sessions (metadata only)
+
+  // Tier 2 — side effects, medium risk
+  | 'commands:register'     // Add slash commands to adapters
+  | 'middleware:register'   // Intercept and modify prompts/responses
+  | 'storage:write'         // Read/write plugin-scoped storage
+  | 'messages:send'         // Send messages to session topics
+
+  // Tier 3 — full access, high risk
+  | 'core:access'           // Direct access to OpenACPCore, SessionManager, etc.
+  | 'config:read'           // Read OpenACP configuration (may contain tokens)
+  | 'adapter:create'        // Act as a channel adapter
+```
+
+### 2. Permission Enforcement
+
+PluginContext is constructed based on declared permissions. Undeclared APIs are **not available** — not just warned, but absent:
+
+```typescript
+function createPluginContext(plugin: OpenACPPlugin, services: CoreServices): PluginContext {
+  const permissions = new Set(plugin.permissions)
+  const ctx: PluginContext = {
+    log: createPluginLogger(plugin.name),
+    pluginConfig: getPluginConfig(plugin.name),
+  }
+
+  // Tier 1
+  if (permissions.has('events:read')) {
+    ctx.on = (event, handler) => eventBus.on(event, handler)
+    ctx.off = (event, handler) => eventBus.off(event, handler)
+  }
+  if (permissions.has('sessions:list')) {
+    ctx.sessions = { getActiveSessions: () => sessionManager.getActiveSessions() }
+  }
+
+  // Tier 2
+  if (permissions.has('commands:register')) {
+    ctx.registerCommand = (def) => commandRegistry.register(plugin.name, def)
+  }
+  if (permissions.has('middleware:register')) {
+    ctx.registerMiddleware = (hook, fn) => middlewareRegistry.register(plugin.name, hook, fn)
+  }
+  if (permissions.has('storage:write')) {
+    ctx.storage = createPluginStorage(plugin.name)
+  }
+  if (permissions.has('messages:send')) {
+    ctx.sendMessage = (sessionId, content) => bridge.sendMessage(sessionId, content)
+  }
+
+  // Tier 3
+  if (permissions.has('core:access')) {
+    ctx.core = services.core
+    ctx.eventBus = services.eventBus
+  }
+  if (permissions.has('config:read')) {
+    ctx.config = services.config  // read-only proxy
+  }
+
+  return ctx
+}
+```
+
+If a plugin tries to access an API it didn't declare (e.g., `ctx.core` without `core:access`), the property is `undefined` — standard JS behavior, no special error needed. Plugin authors will see the issue during development.
+
+### 3. Installation Consent & Audit
+
+When installing a plugin, `openacp plugin add` displays a clear permission audit:
+
+```
+$ openacp plugin add @community/plugin-auto-approve
+
+📦 @community/plugin-auto-approve v1.2.0
+   Auto-approve read operations for agents
+
+   Requested permissions:
+   ✅ events:read          — Listen to system events
+   ✅ commands:register    — Add /autoapprove command
+   ⚠️  core:access          — Full access to OpenACP core services
+
+   ⚠️  WARNING: This plugin requests Tier 3 access (core:access).
+   It can read bot tokens, session data, and access all core services.
+   Only install plugins you trust.
+
+   Publisher: @community (unverified)
+
+   Install? [y/N]
+```
+
+For Tier 1-only plugins, the warning is minimal:
+
+```
+$ openacp plugin add @openacp/plugin-conversation-log
+
+📦 @openacp/plugin-conversation-log v1.0.0
+   Record all conversation events per session
+
+   Requested permissions:
+   ✅ events:read          — Listen to system events
+   ✅ storage:write        — Store conversation logs
+   ✅ commands:register    — Add /history command
+
+   Publisher: @openacp (official ✓)
+
+   Install? [Y/n]
+```
+
+### 4. Trusted Publishers
+
+Three trust levels based on npm scope:
+
+| Scope | Trust Level | Install Behavior |
+|-------|-------------|------------------|
+| `@openacp/*` | Official | Auto-trusted, default Y |
+| Verified community | Verified | Show permissions, default Y for Tier 1-2 |
+| Everything else | Unverified | Show permissions + warning, default N |
+
+**Verification process** (future): Community publishers submit plugins for review. Verified plugins are listed in an OpenACP plugin registry with signed checksums.
+
+For v2.0, verification is manual — `@openacp/*` is official, everything else shows "unverified" warning.
+
+### 5. Checksum Verification
+
+Protect against supply chain attacks (compromised packages):
+
+```
+~/.openacp/plugins/checksums.json
+{
+  "@openacp/plugin-context-bridge@1.0.0": {
+    "sha256": "a1b2c3d4...",
+    "verifiedAt": "2026-03-25T10:00:00Z",
+    "source": "npm"
+  }
+}
+```
+
+**On install:**
+1. Download package from npm
+2. Compute SHA-256 of package tarball
+3. Store in checksums.json
+
+**On startup:**
+1. For each plugin, recompute hash of installed package
+2. Compare with stored checksum
+3. If mismatch → **refuse to load**, log error:
+   ```
+   ❌ Plugin @openacp/plugin-context-bridge checksum mismatch!
+      Expected: a1b2c3d4...
+      Got:      e5f6g7h8...
+      The plugin may have been tampered with. Reinstall with:
+      openacp plugin add @openacp/plugin-context-bridge --force
+   ```
+
+**On update:**
+- `openacp plugin update <name>` re-downloads and re-computes checksum
+- `--force` flag bypasses checksum check (for development)
+
+### 6. Runtime Guardrails
+
+Even with permissions, add runtime protections:
+
+**A) Network access monitoring (Tier 3 only):**
+```typescript
+// Wrap plugin setup in a monitoring proxy for Tier 3 plugins
+// Log any outbound network connections made during setup
+if (plugin.permissions.includes('core:access')) {
+  log.warn({ plugin: plugin.name }, 'Plugin has Tier 3 access — monitoring enabled')
+}
+```
+
+**B) Storage isolation:**
+- Plugins can ONLY write to `~/.openacp/plugins/data/<plugin-name>/`
+- PluginStorage enforces path prefix — no escape via `../../`
+- Storage size limit per plugin (default 50MB, configurable)
+
+**C) Command namespace isolation:**
+- Plugin commands are prefixed internally: `plugin:<name>:<command>`
+- If two plugins register `/context`, conflict detected at startup → error logged, first-registered wins
+- Built-in commands ALWAYS take precedence over plugin commands
+
+**D) Middleware execution timeout:**
+```typescript
+// Middleware must complete within 5 seconds
+const result = await Promise.race([
+  middleware.handler(data),
+  new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Middleware timeout')), 5000)
+  )
+])
+```
+
+**E) Event handler error budget:**
+- If a plugin's event handler throws more than 10 errors in 60 seconds → auto-disable plugin
+- Log: "Plugin X disabled due to repeated errors. Re-enable with: openacp plugin enable X"
+- Prevents a buggy plugin from flooding logs or degrading performance
+
+### 7. Plugin Audit Command
+
+```bash
+openacp plugin audit
+```
+
+Shows security overview of all installed plugins:
+
+```
+Plugin Security Audit
+━━━━━━━━━━━━━━━━━━━━
+
+@openacp/plugin-context-bridge v1.0.0
+  Publisher: @openacp (official ✓)
+  Permissions: events:read, commands:register, storage:write
+  Tier: 2 (medium risk)
+  Checksum: ✅ verified
+  Errors (24h): 0
+
+@community/plugin-auto-approve v1.2.0
+  Publisher: @community (unverified)
+  Permissions: events:read, commands:register, core:access
+  Tier: 3 (HIGH RISK) ⚠️
+  Checksum: ✅ verified
+  Errors (24h): 2
+
+unknown-plugin v0.1.0
+  Publisher: unknown (unverified) ⚠️
+  Permissions: events:read, core:access, config:read
+  Tier: 3 (HIGH RISK) ⚠️
+  Checksum: ❌ MISMATCH — plugin may be tampered!
+  Errors (24h): 47 — AUTO-DISABLED
+```
+
+### Security Summary
+
+| Layer | Protection | When |
+|-------|-----------|------|
+| Permission declaration | Plugin declares what it needs | Plugin development |
+| Permission enforcement | PluginContext only exposes declared APIs | Runtime |
+| Install consent | User reviews permissions before install | Install time |
+| Trusted publishers | `@openacp/*` official, others warned | Install time |
+| Checksum verification | Detect tampered packages | Install + startup |
+| Storage isolation | Plugins can't write outside their directory | Runtime |
+| Command namespace | Prevent command conflicts, built-in priority | Startup |
+| Middleware timeout | Prevent hanging middleware | Runtime |
+| Error budget | Auto-disable crashy plugins | Runtime |
+| Audit command | Security overview of all plugins | On demand |
+
 ## Out of Scope (v2.0)
 
-- Plugin sandboxing / permission model (plugins have full process access)
 - Plugin dependency resolution (manual ordering via config)
 - Plugin marketplace / registry (install from npm directly)
 - Hot-reload (plugins loaded at startup only, restart to add/remove)
 - Plugin-to-plugin communication (use EventBus for now)
+- Full process sandboxing (VM isolation, seccomp, etc.) — Node.js limitation
 
 ## Future Improvements
 
@@ -643,3 +922,6 @@ Storage implementation: JSON file with debounced writes (same pattern as Session
 - **Plugin config UI**: Web UI or Telegram command to configure plugin settings
 - **Plugin templates**: `openacp plugin create <name>` — scaffold a new plugin project
 - **Plugin SDK**: `@openacp/plugin-sdk` — utilities, testing helpers, type-safe context
+- **Process isolation**: Run untrusted plugins in worker threads or child processes
+- **Plugin signing**: Cryptographic signatures from verified publishers
+- **Audit logging**: Record all plugin API calls for forensics
