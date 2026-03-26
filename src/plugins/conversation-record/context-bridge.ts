@@ -25,6 +25,7 @@ export class ContextBridge {
       name: 'context',
       description: 'Import conversation context from another session',
       usage: '[session-number]',
+      category: 'plugin',
       handler: (args) => this.handleCommand(ctx, args),
     })
 
@@ -76,7 +77,11 @@ export class ContextBridge {
 
   private async listSessions(args: CommandArgs, sessionManager: SessionManagerLike): Promise<void> {
     const sessions = sessionManager.listSessions()
-    const recorded = sessions.filter((s) => this.recorder.hasRecording(s.id))
+    const recorded = sessions.filter((s) =>
+      this.recorder.hasRecording(s.id) &&
+      s.id !== args.sessionId &&
+      s.name !== 'Assistant'
+    )
 
     if (recorded.length === 0) {
       await args.reply('No recorded sessions available.')
@@ -99,7 +104,11 @@ export class ContextBridge {
     num: number,
   ): Promise<void> {
     const sessions = sessionManager.listSessions()
-    const recorded = sessions.filter((s: { id: string }) => this.recorder.hasRecording(s.id))
+    const recorded = sessions.filter((s: { id: string; name?: string }) =>
+      this.recorder.hasRecording(s.id) &&
+      s.id !== args.sessionId &&
+      s.name !== 'Assistant'
+    )
 
     if (num > recorded.length) {
       await args.reply(`Session ${num} not found. Use /context to see available sessions.`)

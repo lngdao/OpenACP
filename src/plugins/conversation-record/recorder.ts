@@ -33,6 +33,11 @@ export class ConversationRecorder {
 
     ctx.on('session:named', (payload: unknown) => {
       const p = payload as { sessionId: string; name: string }
+      if (p.name === 'Assistant') {
+        // System session — delete recording, not useful for context bridge
+        this.deleteRecording(p.sessionId)
+        return
+      }
       this.append(p.sessionId, 'session:named', p)
     })
 
@@ -95,6 +100,15 @@ export class ConversationRecorder {
   readSessionFrom(sessionId: string, fromLine: number): RecordEntry[] {
     const all = this.readSession(sessionId)
     return all.slice(fromLine)
+  }
+
+  /** Delete a session's recording file. */
+  deleteRecording(sessionId: string): void {
+    try {
+      fs.unlinkSync(this.getSessionPath(sessionId))
+    } catch {
+      // File may not exist
+    }
   }
 
   /** Check if a session has a recording file. */

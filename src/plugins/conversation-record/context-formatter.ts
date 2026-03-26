@@ -42,6 +42,7 @@ function filterRelevant(entries: RecordEntry[]): RecordEntry[] {
   ])
   const relevantEventTypes = new Set([
     'agent_message',
+    'text',
     'tool_call',
     'tool_call_update',
     'error',
@@ -87,15 +88,15 @@ function compress(entries: RecordEntry[]): CompressedEntry[] {
     if (entry.type === 'agent:event') {
       const event = entry.data as { type: string; [key: string]: unknown }
 
-      // Rule 1: Merge consecutive agent_message
-      if (event.type === 'agent_message') {
+      // Rule 1: Merge consecutive text/agent_message
+      if (event.type === 'agent_message' || event.type === 'text') {
         let merged = String(event.content ?? '')
         let j = i + 1
         while (j < entries.length) {
           const next = entries[j]
           if (next.type === 'agent:event') {
             const nextEvent = next.data as { type: string; content?: string }
-            if (nextEvent.type === 'agent_message') {
+            if (nextEvent.type === 'agent_message' || nextEvent.type === 'text') {
               merged += nextEvent.content ?? ''
               j++
               continue
