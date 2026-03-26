@@ -121,8 +121,20 @@ export class ViewerStore {
   }
 
   private isPathAllowed(filePath: string, workingDirectory: string): boolean {
-    const resolved = path.resolve(workingDirectory, filePath)
-    return resolved.startsWith(path.resolve(workingDirectory))
+    const resolved = path.resolve(filePath)
+    const workspace = path.resolve(workingDirectory)
+    const parentDir = path.dirname(workspace)
+
+    const normalize = (p: string) => process.platform === 'darwin' ? p.toLowerCase() : p
+
+    // Don't allow parent to be filesystem root (too permissive)
+    if (parentDir === '/' || parentDir === workspace) {
+      return normalize(resolved).startsWith(normalize(workspace))
+    }
+
+    // Allow files inside workspace OR sibling directories (1 level up)
+    // e.g., workspace=/a/b/openacp, file=/a/b/OpenACP/src/foo.ts → allowed
+    return normalize(resolved).startsWith(normalize(parentDir))
   }
 
   private detectLanguage(filePath: string): string | undefined {

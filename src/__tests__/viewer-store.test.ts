@@ -56,6 +56,13 @@ describe('ViewerStore', () => {
       expect(id).toBeNull()
     })
 
+    it('allows files in sibling directories (agent in subdirectory)', () => {
+      // workspace is /home/user/projects/openacp
+      // file is /home/user/projects/OpenACP/src/cli.ts (sibling dir, different case)
+      const id = store.storeFile('sess-1', '/home/user/projects/OpenACP/src/cli.ts', 'code', '/home/user/projects/openacp')
+      expect(id).toBeTruthy()
+    })
+
     it('rejects content exceeding 1MB', () => {
       const bigContent = 'x'.repeat(1_000_001)
       const id = store.storeFile('sess-1', '/workspace/big.txt', bigContent, '/workspace')
