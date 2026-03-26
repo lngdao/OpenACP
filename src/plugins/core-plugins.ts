@@ -14,6 +14,7 @@ import apiServerPlugin from './api-server/index.js'
 import telegramPlugin from './telegram/index.js'
 import discordPlugin from './discord/index.js'
 import slackPlugin from './slack/index.js'
+import conversationRecordPlugin from './conversation-record/index.js'
 
 export const corePlugins = [
   // Service plugins (no adapter dependencies)
@@ -23,6 +24,7 @@ export const corePlugins = [
   usagePlugin,
   speechPlugin,
   notificationsPlugin,
+  conversationRecordPlugin,
   // Infrastructure plugins
   tunnelPlugin,
   apiServerPlugin,
