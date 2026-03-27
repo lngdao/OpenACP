@@ -1,3 +1,4 @@
+import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { nanoid } from 'nanoid'
 import { createChildLogger } from '../../core/utils/log.js'
@@ -121,20 +122,18 @@ export class ViewerStore {
   }
 
   private isPathAllowed(filePath: string, workingDirectory: string): boolean {
-    const resolved = path.resolve(filePath)
-    const workspace = path.resolve(workingDirectory)
-    const parentDir = path.dirname(workspace)
-
-    const normalize = (p: string) => process.platform === 'darwin' ? p.toLowerCase() : p
-
-    // Don't allow parent to be filesystem root (too permissive)
-    if (parentDir === '/' || parentDir === workspace) {
-      return normalize(resolved).startsWith(normalize(workspace))
+    try {
+      // realpathSync resolves symlinks AND returns canonical case on
+      // case-insensitive filesystems (macOS HFS+/APFS, Windows NTFS)
+      const resolved = fs.realpathSync(path.resolve(workingDirectory, filePath))
+      const workspace = fs.realpathSync(path.resolve(workingDirectory))
+      return resolved.startsWith(workspace + path.sep) || resolved === workspace
+    } catch {
+      // File doesn't exist yet — fall back to path-only check
+      const resolved = path.resolve(workingDirectory, filePath)
+      const workspace = path.resolve(workingDirectory)
+      return resolved.startsWith(workspace + path.sep) || resolved === workspace
     }
-
-    // Allow files inside workspace OR sibling directories (1 level up)
-    // e.g., workspace=/a/b/openacp, file=/a/b/OpenACP/src/foo.ts → allowed
-    return normalize(resolved).startsWith(normalize(parentDir))
   }
 
   private detectLanguage(filePath: string): string | undefined {
