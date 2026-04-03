@@ -3,8 +3,6 @@ import type { RouteDeps } from './types.js';
 import { NotFoundError, ServiceUnavailableError } from '../middleware/error-handler.js';
 import { requireScopes } from '../middleware/auth.js';
 import type { Attachment } from '../../../core/types.js';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import {
   SessionIdParamSchema,
   ConfigIdParamSchema,
@@ -199,23 +197,16 @@ export async function sessionRoutes(
 
       const body = PromptBodySchema.parse(request.body);
 
-      // Decode base64 attachments to temp files inside workspace (PathGuard requires this)
+      // Decode base64 attachments via FileService (handles storage + PathGuard whitelisting)
       let attachments: Attachment[] | undefined;
       if (body.attachments?.length) {
-        const tmpDir = path.join(session.workingDirectory, '.openacp', 'uploads');
-        fs.mkdirSync(tmpDir, { recursive: true });
-
-        attachments = body.attachments.map((att) => {
-          const buf = Buffer.from(att.data, 'base64');
-          const filePath = path.join(tmpDir, `${Date.now()}-${att.fileName}`);
-          fs.writeFileSync(filePath, buf);
-
-          const type = att.mimeType.startsWith('image/') ? 'image' as const
-            : att.mimeType.startsWith('audio/') ? 'audio' as const
-            : 'file' as const;
-
-          return { type, filePath, fileName: att.fileName, mimeType: att.mimeType, size: buf.length };
-        });
+        const fileService = deps.core.fileService;
+        attachments = await Promise.all(
+          body.attachments.map((att) => {
+            const buf = Buffer.from(att.data, 'base64');
+            return fileService.saveFile(sessionId, att.fileName, buf, att.mimeType);
+          }),
+        );
       }
 
       await session.enqueuePrompt(body.prompt, attachments);
