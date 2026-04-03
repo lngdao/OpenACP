@@ -31,9 +31,16 @@ export const AdoptSessionBodySchema = z.object({
   channel: z.string().max(200).optional(),
 });
 
+const AttachmentInputSchema = z.object({
+  fileName: z.string().max(500),
+  mimeType: z.string().max(200),
+  data: z.string().max(15_000_000), // ~10 MB base64 ≈ 13.3 MB string
+});
+
 export const PromptBodySchema = z.object({
   // 100 KB limit — prevents memory exhaustion / DoS via enormous payloads
   prompt: z.string().min(1).max(100_000),
+  attachments: z.array(AttachmentInputSchema).max(10).optional(),
 });
 
 export const PermissionResponseBodySchema = z.object({

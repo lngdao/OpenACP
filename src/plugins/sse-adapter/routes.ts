@@ -3,8 +3,12 @@ import type { OpenACPCore } from '../../core/core.js';
 import type { ConnectionManager } from './connection-manager.js';
 import type { EventBuffer } from './event-buffer.js';
 import type { CommandRegistry } from '../../core/command-registry.js';
+import type { Attachment } from '../../core/types.js';
 import { NotFoundError, BadRequestError } from '../api-server/middleware/error-handler.js';
 import { requireScopes } from '../api-server/middleware/auth.js';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {
   SessionIdParamSchema,
   PromptBodySchema,
@@ -107,7 +111,27 @@ export async function sseRoutes(app: FastifyInstance, deps: SSERouteDeps): Promi
       }
 
       const body = PromptBodySchema.parse(request.body);
-      await session.enqueuePrompt(body.prompt);
+
+      // Decode base64 attachments to temp files
+      let attachments: Attachment[] | undefined;
+      if (body.attachments?.length) {
+        const tmpDir = path.join(os.tmpdir(), 'openacp-uploads', sessionId);
+        fs.mkdirSync(tmpDir, { recursive: true });
+
+        attachments = body.attachments.map((att) => {
+          const buf = Buffer.from(att.data, 'base64');
+          const filePath = path.join(tmpDir, `${Date.now()}-${att.fileName}`);
+          fs.writeFileSync(filePath, buf);
+
+          const type = att.mimeType.startsWith('image/') ? 'image' as const
+            : att.mimeType.startsWith('audio/') ? 'audio' as const
+            : 'file' as const;
+
+          return { type, filePath, fileName: att.fileName, mimeType: att.mimeType, size: buf.length };
+        });
+      }
+
+      await session.enqueuePrompt(body.prompt, attachments);
 
       return { ok: true, sessionId, queueDepth: session.queueDepth };
     },
