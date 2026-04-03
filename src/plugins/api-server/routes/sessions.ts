@@ -4,7 +4,6 @@ import { NotFoundError, ServiceUnavailableError } from '../middleware/error-hand
 import { requireScopes } from '../middleware/auth.js';
 import type { Attachment } from '../../../core/types.js';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   SessionIdParamSchema,
@@ -200,10 +199,10 @@ export async function sessionRoutes(
 
       const body = PromptBodySchema.parse(request.body);
 
-      // Decode base64 attachments to temp files
+      // Decode base64 attachments to temp files inside workspace (PathGuard requires this)
       let attachments: Attachment[] | undefined;
       if (body.attachments?.length) {
-        const tmpDir = path.join(os.tmpdir(), 'openacp-uploads', sessionId);
+        const tmpDir = path.join(session.workingDirectory, '.openacp', 'uploads');
         fs.mkdirSync(tmpDir, { recursive: true });
 
         attachments = body.attachments.map((att) => {
