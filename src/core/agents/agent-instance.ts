@@ -777,6 +777,12 @@ export class AgentInstance extends TypedEmitter<AgentInstanceEvents> {
     // MIME types supported by Claude API for base64 image content
     const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
+    // Whitelist attachment file paths so PathGuard allows reading them
+    // (uploads may be in .openacp/ which is in the default deny list)
+    for (const att of attachments ?? []) {
+      if (att.filePath) this.pathGuard.addAllowedPath(att.filePath);
+    }
+
     for (const att of attachments ?? []) {
       const tooLarge = att.size > 10 * 1024 * 1024; // 10MB base64 guard
 
