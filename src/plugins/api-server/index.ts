@@ -10,6 +10,7 @@ import type { CommandRegistry } from '../../core/command-registry.js'
 import type { ContextManager } from '../context/context-manager.js'
 import type { ApiServerInstance } from './server.js'
 import type { RouteDeps } from './routes/types.js'
+import { CLIENT_COMPATIBILITY } from './compatibility.js'
 import { createChildLogger } from '../../core/utils/log.js'
 
 const log = createChildLogger({ module: 'api-server' })
@@ -278,6 +279,7 @@ function createApiServerPlugin(): OpenACPPlugin {
         authPreHandler: routeAuthPreHandler,
         contextManager,
         lifecycleManager: core.lifecycleManager,
+        getClientCompatibility: () => CLIENT_COMPATIBILITY,
       }
 
       // Register all route plugins under /api/v1/

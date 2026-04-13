@@ -4,6 +4,7 @@ import type { TopicManager } from '../../telegram/topic-manager.js';
 import type { CommandRegistry } from '../../../core/command-registry.js';
 import type { ContextManager } from '../../context/context-manager.js';
 import type { LifecycleManager } from '../../../core/plugin/lifecycle-manager.js';
+import type { ClientCompatibility } from '../compatibility.js';
 
 /**
  * Dependencies injected into Fastify route plugins.
@@ -23,4 +24,6 @@ export interface RouteDeps {
   contextManager?: ContextManager;
   /** LifecycleManager for plugin state queries and hot-load operations. */
   lifecycleManager?: LifecycleManager;
+  /** Returns client compatibility requirements for the health endpoint. */
+  getClientCompatibility: () => ClientCompatibility;
 }

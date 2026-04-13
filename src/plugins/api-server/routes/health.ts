@@ -20,12 +20,14 @@ export async function systemRoutes(
   // or session counts would aid reconnaissance.
   // instanceId is included so callers (e.g. `instances list`) can verify this response
   // belongs to the expected instance and not an unrelated process on the same port.
+  // clientCompatibility is included so the App can enforce version checks on connect.
   app.get('/health', async () => {
     return {
       status: 'ok',
       instanceId: deps.instanceId,
       uptime: Date.now() - deps.startedAt,
       version: deps.getVersion(),
+      clientCompatibility: deps.getClientCompatibility(),
     };
   });
 
