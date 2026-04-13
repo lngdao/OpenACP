@@ -112,6 +112,11 @@ export class Session extends TypedEmitter<SessionEvents> {
   activeTurnContext: TurnContext | null = null;
 
   readonly permissionGate = new PermissionGate();
+  /**
+   * Tool names/IDs that the user has approved with "Always Allow" during this session.
+   * Checked in SessionBridge.checkAutoApprove() to skip re-prompting.
+   */
+  readonly approvedAlways = new Set<string>();
   private readonly queue: PromptQueue;
   private speechService?: SpeechService;
   private pendingContext: string | null = null;

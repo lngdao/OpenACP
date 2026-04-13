@@ -780,6 +780,7 @@ export class AgentInstance extends TypedEmitter<AgentInstanceEvents> {
             id: opt.optionId,
             label: opt.name,
             isAllow: opt.kind === "allow_once" || opt.kind === "allow_always",
+            kind: opt.kind as 'allow_once' | 'allow_always' | 'deny',
           })),
         };
 

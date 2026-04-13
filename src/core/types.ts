@@ -95,6 +95,8 @@ export interface PermissionRequest {
   id: string;
   description: string;
   options: PermissionOption[];
+  /** The tool name this permission is for (used for "always allow" matching across invocations). */
+  toolName?: string;
 }
 
 /** A single choice within a permission request (e.g., "Allow once", "Deny"). */
@@ -103,6 +105,8 @@ export interface PermissionOption {
   label: string;
   /** Whether this option grants the requested permission. */
   isAllow: boolean;
+  /** The kind of approval: "allow_once", "allow_always", or "deny". */
+  kind?: 'allow_once' | 'allow_always' | 'deny';
 }
 
 /**

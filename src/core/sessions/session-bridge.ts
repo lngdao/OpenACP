@@ -468,6 +468,17 @@ export class SessionBridge {
     // Wait for user response — adapter resolves this promise
     const optionId = await promise;
 
+    // If user chose "Always Allow", remember it for future requests in this session
+    const chosenOption = permReq.options.find((o) => o.id === optionId);
+    if (chosenOption?.kind === 'allow_always') {
+      const approvalKey = permReq.toolName ?? permReq.description;
+      this.session.approvedAlways.add(approvalKey);
+      log.info(
+        { sessionId: this.session.id, approvalKey, optionId },
+        "Stored always-allow approval for future requests",
+      );
+    }
+
     // Broadcast permission:resolved so other adapters can dismiss their UI
     this.deps.eventBus?.emit(BusEvent.PERMISSION_RESOLVED, {
       sessionId: this.session.id,
@@ -481,7 +492,7 @@ export class SessionBridge {
     return optionId;
   }
 
-  /** Check if a permission request should be auto-approved (bypass mode only) */
+  /** Check if a permission request should be auto-approved (bypass mode or "always allow") */
   private checkAutoApprove(request: PermissionRequest): string | null {
     // Bypass mode: auto-approve all permissions (agent-side or client-side)
     const modeOption = this.session.getConfigByCategory("mode");
@@ -495,6 +506,19 @@ export class SessionBridge {
         log.info(
           { sessionId: this.session.id, requestId: request.id, optionId: allowOption.id, agentBypass: !!isAgentBypass, clientBypass: !!isClientBypass },
           "Bypass mode: auto-approving permission",
+        );
+        return allowOption.id;
+      }
+    }
+
+    // "Always Allow" — user previously approved this permission description with allow_always
+    const approvalKey = request.toolName ?? request.description;
+    if (this.session.approvedAlways.has(approvalKey)) {
+      const allowOption = request.options.find((o) => o.kind === 'allow_always') ?? request.options.find((o) => o.isAllow);
+      if (allowOption) {
+        log.info(
+          { sessionId: this.session.id, requestId: request.id, optionId: allowOption.id },
+          "Always-allow: auto-approving previously approved permission",
         );
         return allowOption.id;
       }
